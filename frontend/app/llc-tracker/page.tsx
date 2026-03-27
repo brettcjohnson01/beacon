@@ -1,5 +1,5 @@
 'use client';
-import { useState, useMemo } from 'react';
+import React, { useState, useMemo } from 'react';
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
 import { companyProfiles, allLlcs, type LlcStatus } from '@/lib/llcData';
@@ -162,9 +162,8 @@ export default function LlcTrackerPage() {
                   filtered.map((entry, i) => {
                     const isExpanded = expandedRow === i;
                     return (
-                      <>
+                      <React.Fragment key={`row-${i}`}>
                         <tr
-                          key={`row-${i}`}
                           onClick={() => setExpandedRow(isExpanded ? null : i)}
                           className={`cursor-pointer transition-colors ${
                             isExpanded ? 'bg-orange-50' : 'hover:bg-gray-50'
@@ -219,7 +218,7 @@ export default function LlcTrackerPage() {
                             </td>
                           </tr>
                         )}
-                      </>
+                      </React.Fragment>
                     );
                   })
                 )}
