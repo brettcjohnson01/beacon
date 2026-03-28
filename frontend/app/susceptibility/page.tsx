@@ -2,6 +2,8 @@
 
 import { useState, useCallback, useRef, useEffect } from 'react';
 import Link from 'next/link';
+import { ZIP_TO_COUNTY, COUNTY_DATA, type CountyProfile } from '@/lib/stateData';
+import { allLlcs, companyProfiles } from '@/lib/llcData';
 import {
   Chart as ChartJS,
   RadialLinearScale,
@@ -122,20 +124,24 @@ interface ScoreResult {
 // Scoring logic
 // ---------------------------------------------------------------------------
 
-function computeScore(form: FormData, ejPts: number): ScoreResult {
+function computeScore(form: FormData, ejPts: number, county?: CountyProfile | null): ScoreResult {
   const si = STATE_DATA[form.state];
 
   // Dimension 1 — Water (max 20)
   const wSize   = ({ small: 8, medium: 4, large: 1 } as Record<string, number>)[form.waterSystemSize] ?? 0;
   const wSource  = ({ groundwater: 7, mixed: 4, surface: 2 } as Record<string, number>)[form.waterSource] ?? 0;
   const wStress  = ({ yes: 5, somewhat: 3, no: 0 } as Record<string, number>)[form.waterStress] ?? 0;
-  const wMod     = ({ high: 2, moderate: 1, lower: 0 } as Record<string, number>)[si?.waterStress ?? 'lower'];
+  const wMod    = county
+    ? ({ high: 2, moderate: 1, low: 0 } as Record<string, number>)[county.waterStressLevel] ?? 0
+    : ({ high: 2, moderate: 1, lower: 0 } as Record<string, number>)[si?.waterStress ?? 'lower'];
   const water    = Math.min(20, wSize + wSource + wStress + wMod);
 
   // Dimension 2 — Energy (max 20)
-  const ePts   = ({ municipal: 8, iou: 3, unknown: 5 } as Record<string, number>)[form.utilityType] ?? 0;
+  const ePts   = county
+    ? ({ municipal: 8, coop: 8, iou: 3 } as Record<string, number>)[county.utilityType] ?? 5
+    : ({ municipal: 8, iou: 3, unknown: 5 } as Record<string, number>)[form.utilityType] ?? 0;
   const gPts   = 4; // default moderate — question removed for general-audience accessibility
-  const gMod   = ({ ERCOT: 5, WECC: 3, MISO: 3, SPP: 2, SERC: 2, PJM: 2, NPCC: 1 } as Record<string, number>)[si?.gridRegion ?? ''] ?? 0;
+  const gMod   = ({ ERCOT: 5, WECC: 3, MISO: 3, SPP: 2, SERC: 2, PJM: 2, NPCC: 1 } as Record<string, number>)[(county?.gridRegion ?? si?.gridRegion) ?? ''] ?? 0;
   const energy  = Math.min(20, ePts + gPts + gMod);
 
   // Dimension 3 — Zoning (max 18)
@@ -145,7 +151,9 @@ function computeScore(form: FormData, ejPts: number): ScoreResult {
   const zoning  = Math.min(18, lPts + rPts + pPts);
 
   // Dimension 4 — Tax (max 15, auto)
-  const tax = ({ 1: 15, 2: 10, 3: 5 } as Record<number, number>)[si?.taxTier ?? 2] ?? 10;
+  const tax = county
+    ? ({ 1: 15, 2: 10, 3: 5 } as Record<number, number>)[county.taxIncentiveTier] ?? 10
+    : ({ 1: 15, 2: 10, 3: 5 } as Record<number, number>)[si?.taxTier ?? 2] ?? 10;
 
   // Dimension 5 — Geographic (max 10)
   const cPts   = ({ cold: 4, moderate: 2, hot: 1 } as Record<string, number>)[si?.climateZone ?? 'moderate'];
@@ -214,7 +222,7 @@ function dimensionExplanation(key: string, form: FormData, dim: DimScore): strin
     case 'zoning':
       return `Score driven by ${form.industrialLand === 'yes' ? 'significant available industrial land' : form.industrialLand === 'some' ? 'some available land' : form.industrialLand === 'little' ? 'little available land' : 'unknown land availability'}, ${form.recentRezoning === 'yes' ? 'active rezoning' : form.recentRezoning === 'no' ? 'no recent rezoning' : 'unknown rezoning status'}, and ${form.protectedLand === 'yes' ? 'protected land or farmland nearby' : form.protectedLand === 'no' ? 'no protected land buffering the area' : 'unknown protected land status'}.`;
     case 'tax':
-      return `${si?.name ?? 'This state'} is a Tier ${si?.taxTier ?? '?'} state — ${TAX_TIER_LABELS[si?.taxTier ?? 2].toLowerCase()} — resulting in ${dim.score} of 15 possible points automatically.`;
+      return `${si?.name ?? 'This state'} is a Tier ${si?.taxTier ?? '?'} state (${TAX_TIER_LABELS[si?.taxTier ?? 2].toLowerCase()}), scoring ${dim.score} of 15 possible points automatically.`;
     case 'geographic':
       return `Score based on ${si?.climateZone ?? 'unknown'} climate zone (${si?.name ?? 'state'}) and ${form.communityType.replace('_', ' ')} community type, which affect a data center's attractiveness to developers.`;
     case 'community':
@@ -231,43 +239,43 @@ function flagDescription(key: string, form: FormData): { title: string; body: st
   switch (key) {
     case 'water':
       return {
-        title: '💧 Water Vulnerability',
+        title: 'Water Vulnerability',
         body: `Your ${form.waterSource === 'groundwater' ? 'aquifer-dependent' : 'surface water'} system${form.waterSystemSize === 'small' ? ' serving under 5,000 people' : ''} faces serious capacity risk from a facility using 1–5 million gallons per day.${form.waterStress === 'yes' ? ' Drought conditions further compress the available margin.' : ''}`,
         action: 'Demand an independent water impact study as a condition of any permit or rezoning approval.',
       };
     case 'energy':
       return {
-        title: '⚡ Energy Infrastructure',
+        title: 'Energy Infrastructure',
         body: `Your ${si?.gridRegion ?? ''} grid region faces capacity constraints that a major data center load would significantly worsen.${form.utilityType === 'municipal' ? ' A municipal or co-op utility may have limited ability to absorb this demand without rate impacts.' : ''}`,
         action: 'Request a formal load impact study from your utility before any permits are issued.',
       };
     case 'zoning':
       return {
-        title: '🏗️ Land & Zoning Readiness',
+        title: 'Land & Zoning Readiness',
         body: `${form.recentRezoning === 'yes' ? 'Active rezoning activity combined with' : form.industrialLand === 'yes' ? 'Significant available industrial land combined with' : 'Zoning conditions combined with'} ${form.protectedLand === 'no' ? 'no protected land buffer' : 'limited or unknown protected land buffer'} make this area attractive for rapid site selection.`,
         action: 'Attend all zoning board meetings and formally request a community input period before any rezoning vote.',
       };
     case 'tax':
       return {
-        title: '💰 Tax & Incentive Exposure',
+        title: 'Tax & Incentive Exposure',
         body: `${si?.name ?? 'This state'} has some of the most aggressive data center tax incentive programs in the country (Tier ${si?.taxTier ?? '?'}). Public subsidies can total hundreds of millions with limited transparency.`,
         action: 'Request a full fiscal impact analysis showing net taxpayer benefit after all exemptions, abatements, and infrastructure costs.',
       };
     case 'geographic':
       return {
-        title: '🌍 Geographic & Climate Factors',
+        title: 'Geographic & Climate Factors',
         body: `This area's ${si?.climateZone ?? ''} climate and ${form.communityType.replace('_', ' ')} character increase both developer attractiveness and potential community impact from industrial-scale infrastructure.`,
-        action: 'Document baseline environmental and infrastructure conditions now — before any permits are filed — to support future impact assessments.',
+        action: 'Document baseline environmental and infrastructure conditions now, before any permits are filed, to support future impact assessments.',
       };
     case 'community':
       return {
-        title: '🏘️ Community Vulnerability',
+        title: 'Community Vulnerability',
         body: `This community already faces elevated environmental and economic burdens. Adding industrial-scale data center infrastructure compounds cumulative impacts on residents with fewest resources to respond.`,
         action: 'Request a formal Environmental Justice Impact Assessment as a condition of any permit or approval.',
       };
     case 'organizing':
       return {
-        title: '🤝 Organizing & Political Capacity',
+        title: 'Organizing & Political Capacity',
         body: `With ${form.organizingStatus === 'little' ? 'little existing coalition infrastructure' : 'early-stage organizing'}, your leverage window is narrow.${form.ndasSigned === 'yes' ? ' NDAs limiting public information further reduce your ability to mobilize.' : ''}`,
         action: 'Connect with state-level data center organizing groups and file public records requests immediately.',
       };
@@ -278,14 +286,24 @@ function flagDescription(key: string, form: FormData): { title: string; body: st
 
 function getNextSteps(result: ScoreResult, _form: FormData): string[] {
   const steps: string[] = [];
-  if (result.urgency) steps.push('File public records requests immediately — gather all project documents, permits, and correspondence before information becomes restricted.');
-  if (result.flags.includes('water')) steps.push('Commission or request an independent water impact study — ask specifically about peak daily water withdrawal relative to your system capacity.');
+  if (result.urgency) steps.push('File public records requests immediately. Gather all project documents, permits, and correspondence before information becomes restricted.');
+  if (result.flags.includes('water')) steps.push('Commission or request an independent water impact study. Ask specifically about peak daily water withdrawal relative to your system capacity.');
   if (result.flags.includes('tax')) steps.push('Request a full fiscal impact analysis from your municipality showing net taxpayer benefit after all exemptions and infrastructure costs.');
   if (result.flags.includes('organizing')) steps.push('Connect with state-level data center organizing groups and regional environmental justice networks to build coalition capacity.');
   if (result.flags.includes('energy')) steps.push('Contact your utility and public utility commission to request a formal load impact study for the proposed facility.');
   steps.push('Use the BEACON CBA Tool to analyze or compare any Community Benefits Agreement language associated with this project.');
   return steps.slice(0, 5);
 }
+
+const DIM_ABOUT: Record<string, string> = {
+  water: 'Data centers can use between 1 and 5 million gallons of water per day for cooling. Communities with small water systems, groundwater dependency, or active drought conditions face the greatest capacity and quality risks. Once a facility is approved and built, renegotiating water access becomes very difficult.',
+  energy: 'Data centers require between 50 and 200+ megawatts of continuous power. Municipal utilities and rural co-ops often struggle to absorb that load without rate impacts on other customers. Grid regions already under stress face a higher risk of reliability issues and infrastructure cost-shifting.',
+  zoning: 'Industrial-zoned land can be developed for data centers faster and with fewer public hearings. Active rezoning applications and the absence of protected land buffers both increase the speed at which a project can be approved before communities have time to organize.',
+  tax: 'Many states offer significant tax exemptions and abatements to attract data center investment. These incentives can reduce or eliminate property tax and sales tax revenue for years or decades. The public value of these subsidies is rarely disclosed or independently evaluated before deals are finalized.',
+  geographic: "A community's climate zone and character affect both how attractive it is to developers and how large the local impact will be. Cold climates reduce cooling costs. Rural and small-town communities often have less infrastructure, legal capacity, and political leverage to manage large industrial projects.",
+  community: 'Communities already facing environmental or economic burdens have fewer resources to respond to new industrial development. Adding a large data center compounds cumulative impacts, particularly on lower-income households that rely most on stable public utility rates.',
+  organizing: 'The earlier a community organizes, the more leverage it has. Before permits are filed, communities can demand studies, negotiate conditions, and shape public debate. After approval, options narrow significantly. NDAs that restrict information access further reduce a community\'s ability to respond effectively.',
+};
 
 // ---------------------------------------------------------------------------
 // UI helpers
@@ -550,7 +568,7 @@ function GaugeRing({ score, tierLabel, tierColor }: { score: number; tierLabel: 
 }
 
 function RadarChart({ dimensions }: { dimensions: Record<string, DimScore> }) {
-  const labels = ['💧 Water', '⚡ Energy', '🏗️ Zoning', '💰 Tax', '🌍 Geographic', '🏘️ Community', '🤝 Organizing'];
+  const labels = ['Water', 'Energy', 'Zoning', 'Tax', 'Geographic', 'Community', 'Organizing'];
   const keys = ['water', 'energy', 'zoning', 'tax', 'geographic', 'community', 'organizing'];
   const data = {
     labels,
@@ -636,6 +654,9 @@ export default function SusceptibilityPage() {
   const [ejPts, setEjPts] = useState(2);
   const [ejStatus, setEjStatus] = useState<'idle' | 'loading' | 'done' | 'failed'>('idle');
   const [result, setResult] = useState<ScoreResult | null>(null);
+  const [expandedDim, setExpandedDim] = useState<string | null>(null);
+  const [matchedCounty, setMatchedCounty] = useState<CountyProfile | null>(null);
+  const [matchedCountyName, setMatchedCountyName] = useState<string | null>(null);
 
   const set = useCallback(<K extends keyof FormData>(key: K, val: FormData[K]) => {
     setForm((prev) => ({ ...prev, [key]: val }));
@@ -692,6 +713,23 @@ export default function SusceptibilityPage() {
     }
   }, []);
 
+  const lookupCounty = useCallback((zip: string) => {
+    if (!zip || !/^\d{5}$/.test(zip)) {
+      setMatchedCounty(null);
+      setMatchedCountyName(null);
+      return;
+    }
+    const prefix = zip.slice(0, 3);
+    const countyName = ZIP_TO_COUNTY[prefix];
+    if (countyName && COUNTY_DATA[countyName]) {
+      setMatchedCounty(COUNTY_DATA[countyName]);
+      setMatchedCountyName(countyName);
+    } else {
+      setMatchedCounty(null);
+      setMatchedCountyName(null);
+    }
+  }, []);
+
   // Step validation — which fields must be filled to advance
   const canAdvance = (): boolean => {
     if (step === 1) return !!form.state && !!form.communityType;
@@ -703,7 +741,7 @@ export default function SusceptibilityPage() {
   };
 
   const handleCalculate = () => {
-    const r = computeScore(form, ejPts);
+    const r = computeScore(form, ejPts, matchedCounty);
     setResult(r);
     window.scrollTo({ top: 0, behavior: 'smooth' });
     // Fire-and-forget anonymous submission — never surfaces errors to user
@@ -743,16 +781,18 @@ export default function SusceptibilityPage() {
     setEjPts(2);
     setEjStatus('idle');
     setResult(null);
+    setMatchedCounty(null);
+    setMatchedCountyName(null);
   };
 
-  const dimMeta: Array<{ key: string; label: string; icon: string }> = [
-    { key: 'water',      label: 'Water Vulnerability',     icon: '💧' },
-    { key: 'energy',     label: 'Energy Infrastructure',   icon: '⚡' },
-    { key: 'zoning',     label: 'Land & Zoning Readiness', icon: '🏗️' },
-    { key: 'tax',        label: 'Tax & Incentive Exposure', icon: '💰' },
-    { key: 'geographic', label: 'Geographic Factors',      icon: '🌍' },
-    { key: 'community',  label: 'Community Vulnerability',  icon: '🏘️' },
-    { key: 'organizing', label: 'Organizing Capacity',      icon: '🤝' },
+  const dimMeta = [
+    { key: 'water',      label: 'Water Vulnerability',     icon: <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 2C10 2 4 8 4 14a8 8 0 0016 0C20 8 14 2 12 2z" /></svg> },
+    { key: 'energy',     label: 'Energy Infrastructure',   icon: <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" /></svg> },
+    { key: 'zoning',     label: 'Land & Zoning Readiness', icon: <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-2 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" /></svg> },
+    { key: 'tax',        label: 'Tax & Incentive Exposure', icon: <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg> },
+    { key: 'geographic', label: 'Geographic Factors',      icon: <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9" /></svg> },
+    { key: 'community',  label: 'Community Vulnerability',  icon: <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" /></svg> },
+    { key: 'organizing', label: 'Organizing Capacity',      icon: <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" /></svg> },
   ];
 
   // -------------------------------------------------------------------------
@@ -791,14 +831,15 @@ export default function SusceptibilityPage() {
 
             {/* Urgency banner */}
             {result.urgency && (
-              <div className="bg-red-600 text-white px-6 py-4 rounded-b-lg mb-6 flex items-start gap-3">
-                <span className="text-xl mt-0.5">⚠️</span>
+              <div className="bg-[#fef3c7] border border-[#f59e0b] text-[#92400e] px-6 py-4 rounded-b-lg mb-6 flex items-start gap-3">
+                <svg className="w-5 h-5 mt-0.5 shrink-0 text-[#d97706]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                </svg>
                 <div>
-                  <span className="font-bold">URGENT: </span>
-                  Based on the project stage you selected, your leverage window may be closing.{' '}
+                  <span className="font-semibold">Time-sensitive: </span>
                   {result.urgency === 'WINDOW CLOSING'
-                    ? 'Even post-approval, community organizing can shape implementation conditions.'
-                    : 'Take action now — every week matters.'}
+                    ? 'This project has already been approved. Community organizing can still shape implementation conditions and future agreements.'
+                    : 'Based on the project stage you selected, community input opportunities may be limited. Review the recommended next steps below.'}
                 </div>
               </div>
             )}
@@ -817,18 +858,44 @@ export default function SusceptibilityPage() {
             {/* Dimension breakdown */}
             <div className="bg-white border border-gray-200 rounded-xl shadow-sm p-6 mb-6">
               <h2 className="text-xl font-bold text-gray-900 mb-5">Score Breakdown</h2>
-              <div className="space-y-5">
+              <div className="space-y-2">
                 {dimMeta.map(({ key, label, icon }) => {
                   const d = result.dimensions[key];
                   const color = d.pct >= 75 ? '#ef4444' : d.pct >= 50 ? '#f5a623' : d.pct >= 25 ? '#eab308' : '#22c55e';
+                  const isOpen = expandedDim === key;
                   return (
-                    <div key={key}>
-                      <div className="flex items-center justify-between mb-1">
-                        <span className="text-sm font-semibold text-gray-800">{icon} {label}</span>
-                        <span className="text-sm font-mono text-gray-600">{d.score} / {d.max} pts</span>
+                    <div key={key} className="border border-gray-200 rounded-lg overflow-hidden">
+                      <button
+                        type="button"
+                        onClick={() => setExpandedDim(isOpen ? null : key)}
+                        className="w-full flex items-center justify-between px-4 py-3 hover:bg-gray-50 transition-colors text-left"
+                      >
+                        <span className="flex items-center gap-2 text-sm font-semibold text-gray-800">
+                          {icon}
+                          {label}
+                        </span>
+                        <div className="flex items-center gap-3 shrink-0">
+                          <span className="text-sm font-mono text-gray-600">{d.score} / {d.max} pts</span>
+                          <svg className={`w-4 h-4 text-gray-400 transition-transform ${isOpen ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                          </svg>
+                        </div>
+                      </button>
+                      <div className="px-4 pb-3">
+                        <ScoreBar pct={d.pct} color={color} />
                       </div>
-                      <ScoreBar pct={d.pct} color={color} />
-                      <p className="text-xs text-gray-500 mt-1.5 leading-relaxed">{dimensionExplanation(key, form, d)}</p>
+                      {isOpen && (
+                        <div className="px-4 pb-4 border-t border-gray-100 space-y-3">
+                          <div className="pt-3">
+                            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">About this risk factor</p>
+                            <p className="text-sm text-gray-700 leading-relaxed">{DIM_ABOUT[key]}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">How your points were calculated</p>
+                            <p className="text-sm text-gray-600 leading-relaxed">{dimensionExplanation(key, form, d)}</p>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   );
                 })}
@@ -864,16 +931,16 @@ export default function SusceptibilityPage() {
                   </li>
                 ))}
               </ul>
-              <div className="mt-6 pt-5 border-t border-gray-100 flex flex-col sm:flex-row gap-3 items-start sm:items-center">
+              <div className="mt-6 pt-5 border-t border-gray-100 flex gap-3">
                 <Link
                   href="/cba"
-                  className="inline-block bg-[#f5a623] text-white font-semibold px-6 py-3 rounded-lg hover:bg-orange-500 transition-colors"
+                  className="flex-1 text-center bg-[#f5a623] text-white font-semibold px-6 py-3 rounded-lg hover:bg-orange-500 transition-colors"
                 >
                   Build Your CBA →
                 </Link>
                 <button
                   onClick={handleReset}
-                  className="inline-block border border-gray-300 text-gray-700 font-medium px-5 py-3 rounded-lg hover:border-gray-400 transition-colors text-sm"
+                  className="flex-1 text-center border border-gray-300 text-gray-700 font-medium px-5 py-3 rounded-lg hover:border-gray-400 transition-colors text-sm"
                 >
                   Recalculate →
                 </button>
@@ -968,24 +1035,40 @@ export default function SusceptibilityPage() {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-1.5">ZIP Code <span className="text-gray-400 font-normal">(optional — used for environmental data lookup)</span></label>
+                  <label className="block text-sm font-semibold text-gray-700 mb-1.5">ZIP Code — recommended for accurate local data</label>
                   <input
                     type="text"
                     value={form.zip}
-                    onChange={(e) => set('zip', e.target.value)}
-                    onBlur={(e) => fetchEjscreen(e.target.value)}
+                    onChange={(e) => {
+                      set('zip', e.target.value);
+                      if (e.target.value.length === 5) lookupCounty(e.target.value);
+                    }}
+                    onBlur={(e) => {
+                      fetchEjscreen(e.target.value);
+                      lookupCounty(e.target.value);
+                    }}
                     placeholder="e.g. 30201"
                     maxLength={5}
                     className="w-full px-3 py-2 border border-gray-300 rounded text-sm text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-1 focus:ring-[#f5a623]"
                   />
+                  <p className="mt-1 text-xs text-gray-400 leading-relaxed">
+                    Entering your ZIP unlocks county-level utility, water, and data center activity data. Without it, we use state-level averages.
+                  </p>
                   {ejStatus === 'loading' && (
                     <p className="mt-1.5 text-sm text-gray-500 flex items-center gap-2">
                       <span className="inline-block w-3 h-3 border-2 border-gray-400 border-t-transparent rounded-full animate-spin" />
                       Looking up your community data…
                     </p>
                   )}
-                  {ejStatus === 'done' && (
-                    <p className="mt-1.5 text-sm text-green-600 font-medium">Community data loaded ✓</p>
+                  {matchedCounty && matchedCountyName && (
+                    <p className="mt-1.5 text-sm text-green-600 font-medium">
+                      ✓ County data found: {matchedCountyName} — enhanced local scoring enabled
+                    </p>
+                  )}
+                  {!matchedCounty && ejStatus === 'done' && (
+                    <p className="mt-1.5 text-sm text-green-600 font-medium">
+                      ✓ ZIP recorded — environmental data lookup enabled
+                    </p>
                   )}
                 </div>
 
