@@ -5,8 +5,6 @@ import { US_STATES } from '@/lib/mockData';
 const COMMUNITY_TYPES = ['Rural', 'Small Town', 'Suburb', 'City'];
 const PROJECT_STATUSES = ['No project yet', 'Proposed', 'Planning / permitting', 'Under construction', 'Operating'];
 const ZONING_TYPES = ["Don't know", 'Agricultural', 'Residential', 'Commercial', 'Industrial', 'Special district'];
-const DECISION_MAKERS = ['County commission', 'City council', 'Township board', 'Planning commission', 'Utility commission'];
-const ORG_STRENGTH = ['Just getting started', 'Some active organizers', 'Strong coalition'];
 
 export default function ProfilePage() {
   const [state, setState] = useState('');
@@ -14,14 +12,6 @@ export default function ProfilePage() {
   const [projectStatus, setProjectStatus] = useState('');
   const [multipleProjects, setMultipleProjects] = useState(false);
   const [zoning, setZoning] = useState('');
-  const [decisionMakers, setDecisionMakers] = useState<string[]>([]);
-  const [orgStrength, setOrgStrength] = useState('');
-
-  const toggleDecisionMaker = (dm: string) => {
-    setDecisionMakers(prev =>
-      prev.includes(dm) ? prev.filter(d => d !== dm) : [...prev, dm]
-    );
-  };
 
   return (
     <div className="max-w-2xl mx-auto">
@@ -44,17 +34,17 @@ export default function ProfilePage() {
 
           {/* State */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">State <span className="text-red-500">*</span></label>
-            <div className="flex flex-wrap gap-1.5">
+            <label className="block text-sm font-medium text-gray-700 mb-1">State <span className="text-red-500">*</span></label>
+            <select
+              value={state}
+              onChange={(e) => setState(e.target.value)}
+              className="w-full border border-gray-300 rounded px-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-1 focus:ring-[#f5a623] bg-white"
+            >
+              <option value="">Select your state</option>
               {US_STATES.map(s => (
-                <button key={s} onClick={() => setState(s)}
-                  className={`px-2.5 py-1 text-xs rounded border transition-colors ${
-                    state === s ? 'border-[#f5a623] bg-orange-50 text-[#f5a623]' : 'border-gray-200 text-gray-600 hover:border-gray-400'
-                  }`}>
-                  {s}
-                </button>
+                <option key={s} value={s}>{s}</option>
               ))}
-            </div>
+            </select>
           </div>
 
           {/* County */}
@@ -131,34 +121,6 @@ export default function ProfilePage() {
                   }`}>
                   {z}
                 </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Key Decision Makers */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Key Decision-Makers (select all that apply)</label>
-            <div className="space-y-2">
-              {DECISION_MAKERS.map(dm => (
-                <label key={dm} className="flex items-center gap-2 cursor-pointer">
-                  <input type="checkbox" checked={decisionMakers.includes(dm)} onChange={() => toggleDecisionMaker(dm)} className="accent-[#f5a623]" />
-                  <span className="text-sm text-gray-700">{dm}</span>
-                </label>
-              ))}
-            </div>
-          </div>
-
-          {/* Organizing strength */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">How organized is your community? <span className="text-red-500">*</span></label>
-            <div className="space-y-1.5">
-              {ORG_STRENGTH.map(s => (
-                <label key={s} className="flex items-center gap-3 p-2.5 rounded border border-gray-200 cursor-pointer hover:bg-gray-50">
-                  <input type="radio" name="org-strength" value={s} checked={orgStrength === s}
-                    onChange={() => setOrgStrength(s)}
-                    className="accent-[#f5a623]" />
-                  <span className="text-sm text-gray-700">{s}</span>
-                </label>
               ))}
             </div>
           </div>
