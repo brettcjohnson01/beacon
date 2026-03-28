@@ -10,6 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from .ejscreen import fetch_ejscreen_percentile, ejscreen_pts_from_percentile
 from .scorer import SusceptibilityInput, ScoreResult, calculate
+from .submissions import SubmissionRecord, append_submission
 
 app = FastAPI(
     title="BEACON Susceptibility Calculator",
@@ -46,3 +47,13 @@ async def calculate_susceptibility(inp: SusceptibilityInput) -> ScoreResult:
         ejscreen_pts = ejscreen_pts_from_percentile(percentile) if ejscreen_used else 2
 
     return calculate(inp, ejscreen_pts=ejscreen_pts, ejscreen_used=ejscreen_used)
+
+
+@app.post("/api/susceptibility/submit")
+async def submit_anonymous(record: SubmissionRecord) -> dict:
+    """
+    Persist an anonymous submission record.  Fire-and-forget from the frontend —
+    never raises errors visible to the user.
+    """
+    append_submission(record)
+    return {"status": "ok"}

@@ -58,7 +58,7 @@ export default function LlcTrackerPage() {
     <div className="min-h-screen bg-[#1a2332] text-white">
       {/* Nav */}
       <nav className="flex items-center justify-between px-6 py-3 border-b border-white/10">
-        <span className="text-[#f5a623] font-bold text-lg tracking-wide">BEACON</span>
+        <Link href="/" className="text-[#f5a623] font-bold text-lg tracking-wide hover:opacity-80 transition-opacity">BEACON</Link>
         <div className="flex items-center gap-6">
           <Link href="/" className="text-sm text-white hover:text-[#f5a623] transition-colors">
             Home

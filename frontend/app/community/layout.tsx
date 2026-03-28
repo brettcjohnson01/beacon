@@ -1,10 +1,12 @@
 import { ReactNode } from 'react';
+import Link from 'next/link';
 import NavTabs from '@/components/NavTabs';
 
 export default function CommunityLayout({ children }: { children: ReactNode }) {
   return (
     <div className="min-h-screen bg-gray-50">
-      <header className="bg-[#1a2332] text-white py-8 px-4 text-center">
+      <header className="bg-[#1a2332] text-white py-8 px-4 text-center relative">
+        <Link href="/" className="absolute left-6 top-6 text-[#f5a623] font-bold text-lg tracking-wide hover:opacity-80 transition-opacity">BEACON</Link>
         <div className="text-[#f5a623] mb-2 flex justify-center">
           <svg className="w-10 h-10" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}

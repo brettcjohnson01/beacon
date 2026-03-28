@@ -100,8 +100,8 @@ interface FormData {
   waterStress: 'yes' | 'somewhat' | 'no' | '';
   utilityType: 'municipal' | 'iou' | 'unknown' | '';
   industrialLand: 'yes' | 'some' | 'little' | 'unknown' | '';
-  recentRezoning: 'yes' | 'rumors' | 'no' | 'unknown' | '';
-  protectedLand: 'significant' | 'some' | 'none' | '';
+  recentRezoning: 'yes' | 'no' | 'unknown' | '';
+  protectedLand: 'yes' | 'no' | 'unknown' | '';
   projectStage: 'rumor' | 'announced' | 'permit' | 'negotiating' | 'approved' | '';
   ndasSigned: 'yes' | 'unknown' | 'no' | '';
   organizingStatus: 'little' | 'some' | 'strong' | '';
@@ -140,8 +140,8 @@ function computeScore(form: FormData, ejPts: number): ScoreResult {
 
   // Dimension 3 — Zoning (max 18)
   const lPts   = ({ yes: 7, some: 4, little: 1, unknown: 4 } as Record<string, number>)[form.industrialLand] ?? 0;
-  const rPts   = ({ yes: 6, rumors: 3, no: 0, unknown: 2 } as Record<string, number>)[form.recentRezoning] ?? 0;
-  const pPts   = ({ none: 5, some: 2, significant: 0 } as Record<string, number>)[form.protectedLand] ?? 0;
+  const rPts   = ({ yes: 6, no: 0, unknown: 2 } as Record<string, number>)[form.recentRezoning] ?? 0;
+  const pPts   = ({ yes: 2, no: 0, unknown: 2 } as Record<string, number>)[form.protectedLand] ?? 0;
   const zoning  = Math.min(18, lPts + rPts + pPts);
 
   // Dimension 4 — Tax (max 15, auto)
@@ -212,7 +212,7 @@ function dimensionExplanation(key: string, form: FormData, dim: DimScore): strin
     case 'energy':
       return `Score driven by ${form.utilityType === 'municipal' ? 'a municipal or co-op utility' : form.utilityType === 'iou' ? 'an investor-owned utility' : 'unknown utility type'}, a moderate baseline grid capacity assumption, and ${si?.gridRegion ?? 'unknown'} grid region stress.`;
     case 'zoning':
-      return `Score driven by ${form.industrialLand === 'yes' ? 'significant available industrial land' : form.industrialLand === 'some' ? 'some available land' : form.industrialLand === 'little' ? 'little available land' : 'unknown land availability'}, ${form.recentRezoning === 'yes' ? 'active rezoning' : form.recentRezoning === 'rumors' ? 'rezoning rumors' : form.recentRezoning === 'no' ? 'no recent rezoning' : 'unknown rezoning status'}, and ${form.protectedLand === 'none' ? 'no protected land buffering the area' : form.protectedLand === 'some' ? 'some protected land nearby' : 'significant protected land nearby'}.`;
+      return `Score driven by ${form.industrialLand === 'yes' ? 'significant available industrial land' : form.industrialLand === 'some' ? 'some available land' : form.industrialLand === 'little' ? 'little available land' : 'unknown land availability'}, ${form.recentRezoning === 'yes' ? 'active rezoning' : form.recentRezoning === 'no' ? 'no recent rezoning' : 'unknown rezoning status'}, and ${form.protectedLand === 'yes' ? 'protected land or farmland nearby' : form.protectedLand === 'no' ? 'no protected land buffering the area' : 'unknown protected land status'}.`;
     case 'tax':
       return `${si?.name ?? 'This state'} is a Tier ${si?.taxTier ?? '?'} state — ${TAX_TIER_LABELS[si?.taxTier ?? 2].toLowerCase()} — resulting in ${dim.score} of 15 possible points automatically.`;
     case 'geographic':
@@ -244,7 +244,7 @@ function flagDescription(key: string, form: FormData): { title: string; body: st
     case 'zoning':
       return {
         title: '🏗️ Land & Zoning Readiness',
-        body: `${form.recentRezoning === 'yes' ? 'Active rezoning activity combined with' : form.industrialLand === 'yes' ? 'Significant available industrial land combined with' : 'Zoning conditions combined with'} ${form.protectedLand === 'none' ? 'no protected land buffer' : 'limited protected land buffer'} make this area attractive for rapid site selection.`,
+        body: `${form.recentRezoning === 'yes' ? 'Active rezoning activity combined with' : form.industrialLand === 'yes' ? 'Significant available industrial land combined with' : 'Zoning conditions combined with'} ${form.protectedLand === 'no' ? 'no protected land buffer' : 'limited or unknown protected land buffer'} make this area attractive for rapid site selection.`,
         action: 'Attend all zoning board meetings and formally request a community input period before any rezoning vote.',
       };
     case 'tax':
@@ -361,7 +361,7 @@ function InfoIcon({ content }: { content: PopoverContent }) {
         </svg>
       </button>
       {open && (
-        <div className="absolute z-50 left-0 top-6 w-80 bg-white border-l-[3px] border-[#f5a623] rounded-r-lg shadow-lg p-3 text-left">
+        <div className="absolute z-50 left-0 top-6 w-[480px] min-w-[380px] bg-white border-l-[3px] border-[#f5a623] rounded-r-lg shadow-lg p-3 text-left">
           <div className="flex justify-between items-start mb-2">
             <p className="text-sm font-bold text-gray-900">{content.title}</p>
             <button type="button" onClick={() => setOpen(false)} className="text-gray-400 hover:text-gray-600 ml-2 shrink-0 text-xs">✕</button>
@@ -402,13 +402,13 @@ const HELP: Record<string, PopoverContent> = {
   },
   waterSource: {
     title: 'How to find your water source',
-    explanation: 'Your water source affects how vulnerable the supply is — aquifers can be depleted, surface water can be contaminated.',
+    explanation: 'Search by your state and county to find your water system. The results table shows "Primary Source" and "Population Served Count" columns which answer both this question and the water system size question.',
     steps: [
-      'Go to the EPA Safe Drinking Water database (same link above).',
-      'Search for your water system.',
+      'Go to the EPA Safe Drinking Water database link below.',
+      'Select your state and enter your county name, then click Search.',
       'The "Primary Source" column shows exactly what to select: Surface water, Groundwater, or Purchased (count as Mixed).',
     ],
-    links: [{ text: 'Search EPA Safe Drinking Water Database →', url: 'https://sdwis.epa.gov/ords/sfdw_pub/r/sfdw/simple-search/home' }],
+    links: [{ text: 'Search EPA Safe Drinking Water Database →', url: 'https://enviro.epa.gov/enviro/sdwis_find_sys_detail.sys_search_by_county' }],
   },
   waterStress: {
     title: 'How to check your region\'s water stress',
@@ -568,6 +568,7 @@ function RadarChart({ dimensions }: { dimensions: Record<string, DimScore> }) {
   };
   const options = {
     responsive: true,
+    layout: { padding: { top: 12, bottom: 12, left: 16, right: 16 } },
     scales: {
       r: {
         min: 0,
@@ -575,7 +576,7 @@ function RadarChart({ dimensions }: { dimensions: Record<string, DimScore> }) {
         ticks: { stepSize: 25, font: { size: 10 }, color: '#9ca3af' },
         grid: { color: '#e5e7eb' },
         angleLines: { color: '#e5e7eb' },
-        pointLabels: { font: { size: 11 }, color: '#374151' },
+        pointLabels: { font: { size: 12 }, color: '#374151', padding: 8 },
       },
     },
     plugins: {
@@ -705,6 +706,35 @@ export default function SusceptibilityPage() {
     const r = computeScore(form, ejPts);
     setResult(r);
     window.scrollTo({ top: 0, behavior: 'smooth' });
+    // Fire-and-forget anonymous submission — never surfaces errors to user
+    try {
+      const payload = {
+        timestamp: new Date().toISOString(),
+        state: form.state,
+        zip_prefix: form.zip.length >= 3 ? form.zip.slice(0, 3) : '',
+        community_type: form.communityType,
+        water_system_size: form.waterSystemSize,
+        water_source: form.waterSource,
+        water_stress: form.waterStress,
+        utility_type: form.utilityType,
+        industrial_land: form.industrialLand,
+        recent_rezoning: form.recentRezoning,
+        protected_land: form.protectedLand,
+        project_stage: form.projectStage,
+        ndas_signed: form.ndasSigned,
+        organizing_status: form.organizingStatus,
+        total_score: r.total,
+        tier: r.tier,
+        dimension_scores: Object.fromEntries(
+          Object.entries(r.dimensions).map(([k, v]) => [k, v.score])
+        ),
+      };
+      fetch('/api/susceptibility/submit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      }).catch(() => {/* silent */});
+    } catch {/* silent */}
   };
 
   const handleReset = () => {
@@ -734,7 +764,7 @@ export default function SusceptibilityPage() {
       <div className="min-h-screen bg-[#1a2332] text-white">
         {/* Nav */}
         <nav className="flex items-center justify-between px-6 py-3 border-b border-white/10">
-          <span className="text-[#f5a623] font-bold text-lg tracking-wide">BEACON</span>
+          <Link href="/" className="text-[#f5a623] font-bold text-lg tracking-wide hover:opacity-80 transition-opacity">BEACON</Link>
           <div className="flex items-center gap-6">
             <Link href="/" className="text-sm text-white hover:text-[#f5a623] transition-colors">Home</Link>
             <Link href="#tools" className="text-sm text-white hover:text-[#f5a623] transition-colors">Tools</Link>
@@ -843,12 +873,17 @@ export default function SusceptibilityPage() {
                 </Link>
                 <button
                   onClick={handleReset}
-                  className="text-sm text-gray-500 hover:text-gray-700 underline"
+                  className="inline-block border border-gray-300 text-gray-700 font-medium px-5 py-3 rounded-lg hover:border-gray-400 transition-colors text-sm"
                 >
-                  Start over with different inputs
+                  Recalculate →
                 </button>
               </div>
             </div>
+
+            {/* Disclaimer */}
+            <p className="text-xs text-gray-400 text-center leading-relaxed mt-4 pb-4">
+              This tool uses publicly available data and self-reported community inputs. Results are intended to guide organizing and research, not provide legal or technical advice.
+            </p>
 
           </div>
         </div>
@@ -1058,10 +1093,9 @@ export default function SusceptibilityPage() {
                   <label className="block text-sm font-semibold text-gray-700 mb-2">Recent rezoning proposed or approved<InfoIcon content={HELP.recentRezoning} /></label>
                   <ButtonToggle
                     options={[
-                      { value: 'yes',     label: 'Yes' },
-                      { value: 'rumors',  label: 'Rumors / preliminary discussions' },
-                      { value: 'no',      label: 'No' },
-                      { value: 'unknown', label: 'Unknown' },
+                      { value: 'yes',     label: 'Yes — rezoning filed or approved' },
+                      { value: 'no',      label: 'No / Not that I know of' },
+                      { value: 'unknown', label: 'Unknown — I haven\'t checked' },
                     ]}
                     value={form.recentRezoning}
                     onChange={(v) => set('recentRezoning', v as FormData['recentRezoning'])}
@@ -1072,9 +1106,9 @@ export default function SusceptibilityPage() {
                   <label className="block text-sm font-semibold text-gray-700 mb-2">Near farmland, wetlands, or protected land<InfoIcon content={HELP.protectedLand} /></label>
                   <ButtonToggle
                     options={[
-                      { value: 'significant', label: 'Significant protected land' },
-                      { value: 'some',        label: 'Some' },
-                      { value: 'none',        label: 'No protected land nearby' },
+                      { value: 'yes',     label: 'Yes — protected land or farmland nearby' },
+                      { value: 'no',      label: 'No protected land nearby' },
+                      { value: 'unknown', label: 'Unknown — I haven\'t checked' },
                     ]}
                     value={form.protectedLand}
                     onChange={(v) => set('protectedLand', v as FormData['protectedLand'])}
