@@ -9,6 +9,7 @@ export default function Home() {
         <div className="flex items-center gap-6">
           <Link href="/" className="text-sm text-white hover:text-[#f5a623] transition-colors">Home</Link>
           <Link href="#tools" className="text-sm text-white hover:text-[#f5a623] transition-colors">Tools</Link>
+          <Link href="/community-hub" className="text-sm text-white hover:text-[#f5a623] transition-colors">Community Hub</Link>
           <Link href="#about" className="text-sm text-white hover:text-[#f5a623] transition-colors">About</Link>
           <button className="flex items-center gap-2 text-sm border border-[#f5a623] text-[#f5a623] px-3 py-1.5 rounded hover:bg-[#f5a623]/10 transition-colors">
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">

@@ -719,11 +719,10 @@ export default function SusceptibilityPage() {
       setMatchedCountyName(null);
       return;
     }
-    const prefix = zip.slice(0, 3);
-    const countyName = ZIP_TO_COUNTY[prefix];
-    if (countyName && COUNTY_DATA[countyName]) {
-      setMatchedCounty(COUNTY_DATA[countyName]);
-      setMatchedCountyName(countyName);
+    const lookup = ZIP_TO_COUNTY[zip];
+    if (lookup && COUNTY_DATA[lookup.county]) {
+      setMatchedCounty(COUNTY_DATA[lookup.county]);
+      setMatchedCountyName(`${lookup.county}, ${lookup.state}`);
     } else {
       setMatchedCounty(null);
       setMatchedCountyName(null);
@@ -854,6 +853,71 @@ export default function SusceptibilityPage() {
                 <RadarChart dimensions={result.dimensions} />
               </div>
             </div>
+
+            {/* County callout */}
+            {matchedCounty && matchedCountyName && (
+              <div className="bg-white border-l-4 border-[#f5a623] rounded-r-lg shadow-sm p-5 mb-6">
+                <div className="flex items-center gap-2 mb-3">
+                  <svg className="w-4 h-4 text-[#f5a623] shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                  </svg>
+                  <h3 className="text-sm font-bold text-[#1a2332]">
+                    BEACON has detailed data for {matchedCountyName}
+                  </h3>
+                </div>
+                <div className="space-y-2 text-sm text-gray-700">
+                  <div>
+                    <span className="font-medium">Utility provider:</span>{' '}
+                    {matchedCounty.utilityProvider}
+                  </div>
+                  <div>
+                    <span className="font-medium">Known data center activity:</span>{' '}
+                    {matchedCounty.knownDataCenterActivity
+                      ? 'Yes — hyperscalers active in this county'
+                      : 'No confirmed activity'}
+                  </div>
+                  {matchedCounty.llcTrackerEntries.length > 0 && (
+                    <div>
+                      <span className="font-medium">LLC Tracker entries:</span>{' '}
+                      {matchedCounty.llcTrackerEntries.map((llcName, i) => {
+                        const entry = allLlcs.find((e) => e.llcName === llcName);
+                        const profile = companyProfiles.find((p) => p.name === entry?.company);
+                        return (
+                          <span key={llcName}>
+                            {profile ? (
+                              <Link href={`/llc-tracker/${profile.slug}`} className="text-[#f5a623] hover:underline">
+                                {llcName}
+                              </Link>
+                            ) : (
+                              llcName
+                            )}
+                            {i < matchedCounty.llcTrackerEntries.length - 1 ? ', ' : ''}
+                          </span>
+                        );
+                      })}
+                    </div>
+                  )}
+                  <p className="text-xs text-gray-500 leading-relaxed mt-1">
+                    {matchedCounty.notes.split(/[.;]/)[0].trim()}.
+                  </p>
+                </div>
+                {matchedCounty.knownDataCenterActivity && (
+                  <div className="mt-4 pt-3 border-t border-gray-100">
+                    <p className="text-sm text-gray-700 mb-2">
+                      <span className="font-semibold text-[#1a2332]">Known hyperscaler activity detected</span>{' '}
+                      in your county. Check the LLC Tracker for shell companies operating in your area.
+                    </p>
+                    <Link
+                      href="/llc-tracker"
+                      className="inline-block bg-[#1a2332] text-white text-sm font-medium px-4 py-2 rounded hover:opacity-80 transition-opacity"
+                    >
+                      View {matchedCountyName} in LLC Tracker →
+                    </Link>
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Dimension breakdown */}
             <div className="bg-white border border-gray-200 rounded-xl shadow-sm p-6 mb-6">
